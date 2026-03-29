@@ -1,0 +1,621 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="&above">
+  <main class="hero">
+    <canvas id="particleCanvas" class="hero-canvas" aria-hidden="true"></canvas>
+
+    <div class="hero-overlay">
+      <section class="hero-content" aria-label="Homepage hero">
+        <img
+          src="/andabove-wordmark.svg"
+          alt="&above"
+          class="hero-logo"
+          width="135"
+          height="28"
+          loading="eager"
+          decoding="async"
+        />
+        <h1 class="hero-copy">
+          We help enterprise clients discover, build and embed AI so they can solve real challenges faster.
+        </h1>
+        <div class="hero-actions">
+          <button type="button" class="hero-button hero-button-secondary">View our work</button>
+          <button type="button" class="hero-button hero-button-primary">Chat with us</button>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    // @ts-nocheck
+    import * as THREE from "three";
+
+    const params = {
+      scene: {
+        particleCount: 2000,
+        gridSize: 50,
+        cellSize: 3,
+        zDepth: 5,
+        cameraZ: 40,
+      },
+      motion: {
+        timeStep: 0.01,
+        mouseSmoothing: 0.1,
+        magnetRadius: 40,
+        minRadius: 3,
+        maxRadius: 40,
+        amplitude: 3.5,
+        attractionForce: 0.22,
+        breatheRadius: 40,
+        breatheSpeed: 1.05,
+        pulseSpeed: 0.95,
+        stretchForce: 0.9,
+      },
+      blobs: {
+        baseSize: 10,
+        maxSize: 32,
+        effectRadius: 40,
+        halfWidth: 0.096,
+        halfLength: 0.28,
+        edgeSoftness: 0.08,
+        opacityBase: 0.45,
+        opacityCenter: 0.35,
+        opacityMidBase: 0.5,
+        opacityMidRange: 0.45,
+        opacityOuterPeak: 0.95,
+        opacityOuterFalloff: 0.35,
+        opacityMin: 0.45,
+        opacityMax: 1,
+        finalAlphaScale: 1.12,
+        finalAlphaOffset: 0.06,
+      },
+      colors: {
+        centerPurple: "#FFE8DC",
+        midOrange: "#FF9B6B",
+        edgeOrange: "#E85D00",
+        localEdgeStart: 0.55,
+        localEdgeStrength: 0.4,
+        sceneBlendStart: 6,
+        sceneBlendEnd: 42,
+        colorMixStrength: 0.06,
+      },
+      grain: {
+        intensity: 0.07,
+        distScale: 0.5,
+        displacementScale: 3,
+      },
+    };
+
+    function clamp(value, min, max) {
+      return Math.min(max, Math.max(min, value));
+    }
+
+    function hexToVec3(hex) {
+      return new THREE.Color(hex).toArray();
+    }
+
+    class ParticleSystem {
+      constructor(canvas) {
+        this.canvas = canvas;
+        this.scene = null;
+        this.camera = null;
+        this.renderer = null;
+        this.particles = null;
+        this.material = null;
+        this.geometry = null;
+        this.time = 0;
+        this.animationId = null;
+        this.mousePos = {
+          x: window.innerWidth * 0.5,
+          y: window.innerHeight * 0.5,
+        };
+        this.targetMousePos = {
+          x: window.innerWidth * 0.5,
+          y: window.innerHeight * 0.5,
+        };
+        this.raycaster = new THREE.Raycaster();
+        this.mouse = new THREE.Vector2();
+        this.planeZ = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+        this.intersectPoint = new THREE.Vector3();
+
+        this.onMouseMove = this.onMouseMove.bind(this);
+        this.onWindowResize = this.onWindowResize.bind(this);
+        this.onMouseLeave = this.onMouseLeave.bind(this);
+        this.animate = this.animate.bind(this);
+
+        this.init();
+      }
+
+      init() {
+        this.scene = new THREE.Scene();
+        this.camera = new THREE.PerspectiveCamera(
+          75,
+          window.innerWidth / window.innerHeight,
+          0.1,
+          1000,
+        );
+        this.camera.position.z = params.scene.cameraZ;
+
+        this.renderer = new THREE.WebGLRenderer({
+          canvas: this.canvas,
+          antialias: true,
+          alpha: true,
+          powerPreference: "high-performance",
+          precision: "highp",
+        });
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        this.renderer.setClearColor(0x000000, 0);
+
+        this.geometry = this.buildGeometry();
+        this.material = this.createMaterial();
+        this.particles = new THREE.Points(this.geometry, this.material);
+        this.scene.add(this.particles);
+
+        window.addEventListener("mousemove", this.onMouseMove);
+        window.addEventListener("mouseleave", this.onMouseLeave);
+        window.addEventListener("resize", this.onWindowResize);
+        this.animate();
+      }
+
+      buildGeometry() {
+        const geometry = new THREE.BufferGeometry();
+        const positions = new Float32Array(params.scene.particleCount * 3);
+        const velocities = new Float32Array(params.scene.particleCount * 3);
+        const diagonalOffsets = new Float32Array(params.scene.particleCount);
+
+        for (let i = 0; i < params.scene.particleCount; i += 1) {
+          const row = Math.floor(i / params.scene.gridSize);
+          const col = i % params.scene.gridSize;
+
+          let baseX = (col - params.scene.gridSize / 2) * params.scene.cellSize;
+          if (row % 2 !== 0) {
+            baseX += params.scene.cellSize * 0.5;
+          }
+
+          const baseY = (row - params.scene.gridSize / 2) * params.scene.cellSize;
+          positions[i * 3] = baseX;
+          positions[i * 3 + 1] = baseY;
+          positions[i * 3 + 2] = (Math.random() - 0.5) * params.scene.zDepth;
+          velocities[i * 3] = 0;
+          velocities[i * 3 + 1] = 0;
+          velocities[i * 3 + 2] = 0;
+          diagonalOffsets[i] = 0;
+        }
+
+        geometry.setAttribute("position", new THREE.BufferAttribute(positions, 3));
+        geometry.setAttribute("velocity", new THREE.BufferAttribute(velocities, 3));
+        geometry.setAttribute("diagonalOffset", new THREE.BufferAttribute(diagonalOffsets, 1));
+
+        return geometry;
+      }
+
+      buildShaders() {
+        const vertexShader = `
+          attribute vec3 velocity;
+          attribute float diagonalOffset;
+          uniform vec3 mousePos;
+          uniform float time;
+          uniform float magnetRadius;
+          uniform float minRadius;
+          uniform float maxRadius;
+          uniform float amplitude;
+          uniform float attractionForce;
+          uniform float breatheRadius;
+          uniform float breatheSpeed;
+          uniform float pulseSpeed;
+          uniform float stretchForce;
+          uniform float baseSize;
+          uniform float maxSize;
+          uniform float effectRadius;
+          uniform float opacityBase;
+          uniform float opacityCenter;
+          uniform float opacityMidBase;
+          uniform float opacityMidRange;
+          uniform float opacityOuterPeak;
+          uniform float opacityOuterFalloff;
+          uniform float opacityMin;
+          uniform float opacityMax;
+
+          varying float vOpacity;
+          varying float vWaveDisplacement;
+          varying float vRotationAngle;
+          varying float vDistToMouse;
+          varying float vTiltAngle;
+
+          void main() {
+            vec3 pos = position;
+            float distToMouse = length(pos.xy - mousePos.xy);
+            vDistToMouse = distToMouse;
+
+            float wave = 0.0;
+            if (distToMouse < magnetRadius) {
+              if (distToMouse > minRadius && distToMouse < maxRadius) {
+                float normalizedDist = (distToMouse - minRadius) / (maxRadius - minRadius);
+                float decay = sin(normalizedDist * 3.14159);
+                wave = amplitude * decay;
+                vec2 direction = normalize(mousePos.xy - pos.xy);
+                pos.xy += direction * (amplitude * decay * attractionForce);
+              }
+
+              vRotationAngle = atan(mousePos.y - pos.y, mousePos.x - pos.x) + 1.5708;
+              float horizontalDist = length(mousePos.xy - pos.xy);
+              vTiltAngle = atan(mousePos.z - pos.z, horizontalDist);
+            } else {
+              vRotationAngle = 0.0;
+              vTiltAngle = 0.0;
+            }
+
+            pos.z += wave;
+            vWaveDisplacement = wave;
+
+            if (distToMouse < breatheRadius) {
+              float t = distToMouse / breatheRadius;
+              float breath = sin(time * breatheSpeed - distToMouse * 0.06);
+              vec2 toMouse = mousePos.xy - pos.xy;
+              vec2 dir = normalize(toMouse);
+              pos.xy -= dir * (breath * (1.0 - t) * stretchForce);
+            }
+
+            float opacity = opacityBase;
+            if (distToMouse < 10.0) {
+              opacity = opacityCenter;
+            } else if (distToMouse < 15.0) {
+              float zoneFactor = (distToMouse - 3.0) / 12.0;
+              opacity = opacityMidBase + zoneFactor * opacityMidRange;
+            } else if (distToMouse < 30.0) {
+              float zoneFactor = (distToMouse - 15.0) / 25.0;
+              opacity = opacityOuterPeak - zoneFactor * opacityOuterFalloff;
+            }
+            vOpacity = clamp(opacity, opacityMin, opacityMax);
+
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+
+            float particleSize = baseSize;
+            if (distToMouse < effectRadius) {
+              float t = distToMouse / effectRadius;
+              t = t * t * (3.0 - 2.0 * t);
+              float zoomFactor = 1.0 - t;
+              float wavePhase = distToMouse * 0.22;
+              float pulse = sin(time * pulseSpeed - wavePhase);
+              float heightFactor = 1.0 + pulse * 0.12;
+              particleSize = (baseSize + (maxSize - baseSize) * zoomFactor) * heightFactor;
+            }
+
+            gl_PointSize = particleSize;
+          }
+        `;
+
+        const fragmentShader = `
+          uniform vec3 centerPurple;
+          uniform vec3 midOrange;
+          uniform vec3 edgeOrange;
+          uniform float localEdgeStart;
+          uniform float localEdgeStrength;
+          uniform float sceneBlendStart;
+          uniform float sceneBlendEnd;
+          uniform float colorMixStrength;
+          uniform float grainIntensity;
+          uniform float grainDistScale;
+          uniform float grainDisplacementScale;
+          uniform float edgeSoftness;
+          uniform float finalAlphaScale;
+          uniform float finalAlphaOffset;
+
+          varying float vOpacity;
+          varying float vWaveDisplacement;
+          varying float vRotationAngle;
+          varying float vDistToMouse;
+          varying float vTiltAngle;
+
+          float grainNoise(vec2 p) {
+            return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+          }
+
+          void main() {
+            vec2 uv = gl_PointCoord - vec2(0.5);
+            float c = cos(vRotationAngle);
+            float s = sin(vRotationAngle);
+            vec2 rotatedUV = vec2(uv.x * c - uv.y * s, uv.x * s + uv.y * c);
+
+            float tiltCos = cos(vTiltAngle);
+            float compressedX = rotatedUV.x * abs(tiltCos);
+            float dX = abs(compressedX) / ${params.blobs.halfWidth.toFixed(6)};
+            float dY = abs(rotatedUV.y) / ${params.blobs.halfLength.toFixed(6)};
+            if (dX * dX + dY * dY > 1.0) {
+              discard;
+            }
+
+            float distFromCenter = sqrt(dX * dX + dY * dY);
+            float edgeFalloff = 1.0 - distFromCenter;
+            edgeFalloff = smoothstep(0.0, edgeSoftness, edgeFalloff);
+            float alpha = clamp(edgeFalloff * vOpacity, 0.0, 1.0);
+
+            float displacement = abs(vWaveDisplacement);
+            float colorMixFactor = clamp(displacement / 15.0, 0.0, 1.0);
+            float radialDistance = clamp(distFromCenter, 0.0, 1.0);
+            float localEdgeBlend = smoothstep(localEdgeStart, 1.0, radialDistance);
+            float sceneBlend = smoothstep(sceneBlendStart, sceneBlendEnd, vDistToMouse);
+
+            vec3 sceneColor = mix(centerPurple, midOrange, sceneBlend);
+            vec3 finalColor = mix(sceneColor, edgeOrange, localEdgeBlend * localEdgeStrength);
+            finalColor = mix(finalColor, edgeOrange, colorMixFactor * colorMixStrength);
+
+            float grain = grainNoise(
+              gl_FragCoord.xy + vec2(vDistToMouse * grainDistScale, displacement * grainDisplacementScale)
+            );
+            float grainAmount = (grain - 0.5) * grainIntensity;
+            finalColor *= 1.0 + grainAmount;
+            finalColor = clamp(finalColor, 0.0, 1.0);
+
+            float finalAlpha = clamp(alpha * finalAlphaScale + finalAlphaOffset, 0.0, 1.0);
+            gl_FragColor = vec4(finalColor, finalAlpha);
+          }
+        `;
+
+        return { vertexShader, fragmentShader };
+      }
+
+      createMaterial() {
+        const shaders = this.buildShaders();
+
+        return new THREE.ShaderMaterial({
+          vertexShader: shaders.vertexShader,
+          fragmentShader: shaders.fragmentShader,
+          uniforms: {
+            mousePos: { value: new THREE.Vector3(0, 0, 0) },
+            time: { value: 0 },
+            magnetRadius: { value: params.motion.magnetRadius },
+            minRadius: { value: params.motion.minRadius },
+            maxRadius: { value: params.motion.maxRadius },
+            amplitude: { value: params.motion.amplitude },
+            attractionForce: { value: params.motion.attractionForce },
+            breatheRadius: { value: params.motion.breatheRadius },
+            breatheSpeed: { value: params.motion.breatheSpeed },
+            pulseSpeed: { value: params.motion.pulseSpeed },
+            stretchForce: { value: params.motion.stretchForce },
+            baseSize: { value: params.blobs.baseSize },
+            maxSize: { value: params.blobs.maxSize },
+            effectRadius: { value: params.blobs.effectRadius },
+            opacityBase: { value: params.blobs.opacityBase },
+            opacityCenter: { value: params.blobs.opacityCenter },
+            opacityMidBase: { value: params.blobs.opacityMidBase },
+            opacityMidRange: { value: params.blobs.opacityMidRange },
+            opacityOuterPeak: { value: params.blobs.opacityOuterPeak },
+            opacityOuterFalloff: { value: params.blobs.opacityOuterFalloff },
+            opacityMin: { value: params.blobs.opacityMin },
+            opacityMax: { value: params.blobs.opacityMax },
+            centerPurple: { value: new THREE.Vector3(...hexToVec3(params.colors.centerPurple)) },
+            midOrange: { value: new THREE.Vector3(...hexToVec3(params.colors.midOrange)) },
+            edgeOrange: { value: new THREE.Vector3(...hexToVec3(params.colors.edgeOrange)) },
+            localEdgeStart: { value: params.colors.localEdgeStart },
+            localEdgeStrength: { value: params.colors.localEdgeStrength },
+            sceneBlendStart: { value: params.colors.sceneBlendStart },
+            sceneBlendEnd: { value: params.colors.sceneBlendEnd },
+            colorMixStrength: { value: params.colors.colorMixStrength },
+            grainIntensity: { value: params.grain.intensity },
+            grainDistScale: { value: params.grain.distScale },
+            grainDisplacementScale: { value: params.grain.displacementScale },
+            edgeSoftness: { value: params.blobs.edgeSoftness },
+            finalAlphaScale: { value: params.blobs.finalAlphaScale },
+            finalAlphaOffset: { value: params.blobs.finalAlphaOffset },
+          },
+          transparent: true,
+          blending: THREE.NormalBlending,
+        });
+      }
+
+      onMouseMove(event) {
+        this.targetMousePos.x = event.clientX;
+        this.targetMousePos.y = event.clientY;
+      }
+
+      onMouseLeave() {
+        this.targetMousePos.x = window.innerWidth * 0.5;
+        this.targetMousePos.y = window.innerHeight * 0.5;
+      }
+
+      onWindowResize() {
+        this.camera.aspect = window.innerWidth / window.innerHeight;
+        this.camera.updateProjectionMatrix();
+        this.renderer.setSize(window.innerWidth, window.innerHeight);
+      }
+
+      animate() {
+        this.animationId = requestAnimationFrame(this.animate);
+        this.time += params.motion.timeStep;
+
+        const smoothing = clamp(params.motion.mouseSmoothing, 0.01, 1.0);
+        this.mousePos.x += (this.targetMousePos.x - this.mousePos.x) * smoothing;
+        this.mousePos.y += (this.targetMousePos.y - this.mousePos.y) * smoothing;
+
+        this.mouse.x = (this.mousePos.x / window.innerWidth) * 2 - 1;
+        this.mouse.y = -(this.mousePos.y / window.innerHeight) * 2 + 1;
+        this.raycaster.setFromCamera(this.mouse, this.camera);
+        this.raycaster.ray.intersectPlane(this.planeZ, this.intersectPoint);
+
+        this.material.uniforms.mousePos.value.set(
+          this.intersectPoint.x,
+          this.intersectPoint.y,
+          0,
+        );
+        this.material.uniforms.time.value = this.time;
+
+        this.renderer.render(this.scene, this.camera);
+      }
+
+      dispose() {
+        if (this.animationId) cancelAnimationFrame(this.animationId);
+        window.removeEventListener("mousemove", this.onMouseMove);
+        window.removeEventListener("mouseleave", this.onMouseLeave);
+        window.removeEventListener("resize", this.onWindowResize);
+        if (this.particles?.geometry) this.particles.geometry.dispose();
+        if (this.material) this.material.dispose();
+        if (this.renderer) this.renderer.dispose();
+      }
+    }
+
+    let particleSystem = null;
+
+    window.addEventListener("load", function handleLoad() {
+      const canvas = document.getElementById("particleCanvas");
+      if (!canvas) return;
+      particleSystem = new ParticleSystem(canvas);
+    });
+
+    window.addEventListener("beforeunload", function handleUnload() {
+      if (particleSystem) particleSystem.dispose();
+    });
+  </script>
+
+  <style is:global>
+    :root {
+      --slate: #262626;
+      --chalk: #ffffff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      min-height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: var(--chalk);
+      color: var(--slate);
+      font-family: "Aeonik Pro", "Google Sans Flex", Arial, sans-serif;
+    }
+
+    body {
+      min-height: 100vh;
+    }
+
+    .hero {
+      position: relative;
+      min-height: 100vh;
+      overflow: hidden;
+      isolation: isolate;
+      background: var(--chalk);
+    }
+
+    .hero-canvas {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      pointer-events: none;
+    }
+
+    .hero-overlay {
+      position: relative;
+      z-index: 1;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 2rem;
+      pointer-events: none;
+    }
+
+    .hero-content {
+      width: min(100%, 46rem);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.5rem;
+      text-align: center;
+      pointer-events: auto;
+    }
+
+    .hero-logo {
+      width: 8.4375rem;
+      height: auto;
+      display: block;
+    }
+
+    .hero-copy {
+      max-width: 46rem;
+      margin: 0;
+      font-size: clamp(1.875rem, 2.2vw, 1.9375rem);
+      font-weight: 500;
+      line-height: 1.2;
+      letter-spacing: 0;
+      text-wrap: balance;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+
+    .hero-button {
+      min-height: 3rem;
+      padding: 0.625rem 1.5rem;
+      border-radius: 4.4375rem;
+      border: 2px solid var(--slate);
+      font: inherit;
+      font-size: 1.125rem;
+      font-weight: 500;
+      line-height: 1.5;
+      cursor: pointer;
+      transition:
+        transform 0.2s ease,
+        background-color 0.2s ease,
+        color 0.2s ease,
+        opacity 0.2s ease;
+    }
+
+    .hero-button:hover {
+      transform: translateY(-1px);
+    }
+
+    .hero-button-secondary {
+      background: rgba(255, 255, 255, 0.84);
+      color: var(--slate);
+      backdrop-filter: blur(8px);
+    }
+
+    .hero-button-primary {
+      background: var(--slate);
+      color: var(--chalk);
+    }
+
+    @media (max-width: 48rem) {
+      html,
+      body {
+        overflow: auto;
+      }
+
+      .hero-overlay {
+        padding: 1.5rem;
+      }
+
+      .hero-content {
+        gap: 1.25rem;
+        width: min(100%, 32rem);
+      }
+
+      .hero-copy {
+        font-size: clamp(1.625rem, 7vw, 2rem);
+      }
+
+      .hero-actions {
+        width: 100%;
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .hero-button {
+        width: 100%;
+      }
+    }
+  </style>
+</Layout>

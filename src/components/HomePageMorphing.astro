@@ -1,0 +1,288 @@
+---
+import Layout from '../layouts/Layout.astro';
+---
+
+<Layout title="&above">
+  <main class="hero">
+    <div id="morphingParticlesRoot" class="hero-canvas" aria-hidden="true"></div>
+
+    <div class="hero-overlay">
+      <section class="hero-content" aria-label="Homepage hero">
+        <img
+          src="/andabove-wordmark.svg"
+          alt="&above"
+          class="hero-logo"
+          width="135"
+          height="28"
+          loading="eager"
+          decoding="async"
+        />
+        <h1 class="hero-copy">
+          We help enterprise clients discover, build and embed AI so they can solve real challenges faster.
+        </h1>
+        <div class="hero-actions">
+          <button type="button" class="hero-button hero-button-secondary">View our work</button>
+          <button type="button" class="hero-button hero-button-primary">Chat with us</button>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    import { MorphingParticleScene } from "../lib/morphing-particles";
+
+    /**
+     * 500×500 luminance mask: white = where particles can snap on hover (nearestPos).
+     * Black outer + black center “content hole” → white rectangular ring only.
+     */
+    function morphingMaskDataUrl(): string {
+      const canvas = document.createElement("canvas");
+      canvas.width = 500;
+      canvas.height = 500;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return "";
+
+      const W = 500;
+      const H = 500;
+      const outerMargin = 36;
+      const holeInset = 132;
+
+      ctx.fillStyle = "#000000";
+      ctx.fillRect(0, 0, W, H);
+
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(outerMargin, outerMargin, W - 2 * outerMargin, H - 2 * outerMargin);
+
+      ctx.fillStyle = "#000000";
+      ctx.fillRect(holeInset, holeInset, W - 2 * holeInset, H - 2 * holeInset);
+
+      return canvas.toDataURL("image/png");
+    }
+
+    let morphScene: InstanceType<typeof MorphingParticleScene> | null = null;
+    let rafId = 0;
+
+    function tick() {
+      morphScene?.render();
+      rafId = requestAnimationFrame(tick);
+    }
+
+    function init() {
+      const root = document.getElementById("morphingParticlesRoot");
+      if (!root) return;
+
+      const mask = morphingMaskDataUrl();
+      if (!mask) return;
+
+      morphScene = new MorphingParticleScene({
+        container: root,
+        theme: "light",
+        textures: [mask],
+        color1: "#F75D3B",
+        color2: "#F75D3B",
+        color3: "#F75D3B",
+        pixelRatio: Math.min(window.devicePixelRatio, 2),
+        particlesScale: 0.6,
+        density: 50,
+        cameraZoom: 8.8,
+        // Raycast off — hover effect is driven only by `.hero-content` enter/leave (hoverProgress).
+        interactive: false,
+        onLoaded: () => {
+          rafId = requestAnimationFrame(tick);
+        },
+      });
+
+      const content = document.querySelector(".hero-content");
+      const onEnter = () => morphScene?.onHoverStart();
+      const onLeave = () => morphScene?.onHoverEnd();
+      content?.addEventListener("mouseenter", onEnter);
+      content?.addEventListener("mouseleave", onLeave);
+
+      const io = new IntersectionObserver(
+        (entries) => {
+          for (const e of entries) {
+            if (e.isIntersecting) morphScene?.resume();
+            else morphScene?.stop();
+          }
+        },
+        { threshold: 0 },
+      );
+      io.observe(root);
+
+      window.addEventListener(
+        "beforeunload",
+        () => {
+          cancelAnimationFrame(rafId);
+          content?.removeEventListener("mouseenter", onEnter);
+          content?.removeEventListener("mouseleave", onLeave);
+          io.disconnect();
+          morphScene?.kill();
+          morphScene = null;
+        },
+        { once: true },
+      );
+    }
+
+    // DOM-ready is enough — `load` waits for every image/font and adds pointless delay.
+    // The morphing scene still finishes async (worker + GPU init) before the first frame.
+    if (document.readyState !== "loading") void init();
+    else document.addEventListener("DOMContentLoaded", () => void init(), { once: true });
+  </script>
+
+  <style is:global>
+    :root {
+      --slate: #262626;
+      --chalk: #ffffff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      width: 100%;
+      min-height: 100%;
+      margin: 0;
+      overflow: hidden;
+      background: var(--chalk);
+      color: var(--slate);
+      font-family: "Aeonik Pro", "Google Sans Flex", Arial, sans-serif;
+    }
+
+    body {
+      min-height: 100vh;
+    }
+
+    .hero {
+      position: relative;
+      min-height: 100vh;
+      overflow: hidden;
+      isolation: isolate;
+      background: var(--chalk);
+    }
+
+    .hero-canvas {
+      position: absolute;
+      inset: 0;
+      z-index: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+      pointer-events: none;
+    }
+
+    .hero-canvas canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .hero-overlay {
+      position: relative;
+      z-index: 1;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 2rem;
+      pointer-events: none;
+    }
+
+    .hero-content {
+      width: min(100%, 46rem);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.5rem;
+      text-align: center;
+      pointer-events: auto;
+    }
+
+    .hero-logo {
+      width: 8.4375rem;
+      height: auto;
+      display: block;
+    }
+
+    .hero-copy {
+      max-width: 46rem;
+      margin: 0;
+      font-size: clamp(1.875rem, 2.2vw, 1.9375rem);
+      font-weight: 500;
+      line-height: 1.2;
+      letter-spacing: 0;
+      text-wrap: balance;
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+
+    .hero-button {
+      min-height: 3rem;
+      padding: 0.625rem 1.5rem;
+      border-radius: 4.4375rem;
+      border: 2px solid var(--slate);
+      font: inherit;
+      font-size: 1.125rem;
+      font-weight: 500;
+      line-height: 1.5;
+      cursor: pointer;
+      transition:
+        transform 0.2s ease,
+        background-color 0.2s ease,
+        color 0.2s ease,
+        opacity 0.2s ease;
+    }
+
+    .hero-button:hover {
+      transform: translateY(-1px);
+    }
+
+    .hero-button-secondary {
+      background: rgba(255, 255, 255, 0.84);
+      color: var(--slate);
+      backdrop-filter: blur(8px);
+    }
+
+    .hero-button-primary {
+      background: var(--slate);
+      color: var(--chalk);
+    }
+
+    @media (max-width: 48rem) {
+      html,
+      body {
+        overflow: auto;
+      }
+
+      .hero-overlay {
+        padding: 1.5rem;
+      }
+
+      .hero-content {
+        gap: 1.25rem;
+        width: min(100%, 32rem);
+      }
+
+      .hero-copy {
+        font-size: clamp(1.625rem, 7vw, 2rem);
+      }
+
+      .hero-actions {
+        width: 100%;
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .hero-button {
+        width: 100%;
+      }
+    }
+  </style>
+</Layout>

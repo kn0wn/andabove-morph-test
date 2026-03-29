@@ -1,0 +1,10 @@
+/// <reference types="astro/client" />
+/// <reference types="vite/client" />
+
+interface ImportMetaEnv {
+  readonly SITE: string;
+}
+
+interface ImportMeta {
+  readonly env: ImportMetaEnv;
+}
