@@ -1,0 +1,850 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Google Antigravity - Next-Generation IDE</title>
+    <!-- 
+        ULTRA-DENSE SUNFLOWER FIELD:
+        - 50,000 particles (extremely dense net)
+        - 300×300 grid, 5px spacing (TINY holes)
+        - 100px cursor radius (more visible)
+        - Smaller particles (2-8px) for fine detail
+        - Zero void (1px) - seamless center
+        - Head points DIRECTLY at cursor
+        - Maximum screen coverage
+        - Primary color #4f46e5
+    -->
+
+    <!-- Download three.min.js from https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js -->
+
+    <!-- <script src="three.min.js"></script> -->
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <style>
+      /* ============================================
+           GLOBAL STYLES & CSS VARIABLES
+           ============================================ */
+      :root {
+        --primary: #0d00ff;
+        --primary-light: #6366f1;
+        --accent-red: #ef4444;
+        --accent-red-light: #f87171;
+        --text-dark: #1f2937;
+        --text-light: #f9fafb;
+        --bg-light: #ffffff;
+        --bg-light-secondary: #f3f4f6;
+        --bg-dark: #0f172a;
+        --bg-dark-secondary: #1e293b;
+        --border-light: #e5e7eb;
+        --border-dark: #334155;
+        --radius: 0.65rem;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body.dark {
+        background-color: var(--bg-dark);
+        color: var(--text-light);
+      }
+
+      /* ============================================
+           LAYOUT & CONTAINER
+           ============================================ */
+      .container {
+        width: 100%;
+        margin-left: auto;
+        margin-right: auto;
+        padding-left: 1rem;
+        padding-right: 1rem;
+      }
+
+      @media (min-width: 640px) {
+        .container {
+          padding-left: 1.5rem;
+          padding-right: 1.5rem;
+        }
+      }
+
+      @media (min-width: 1024px) {
+        .container {
+          padding-left: 2rem;
+          padding-right: 2rem;
+          max-width: 1280px;
+        }
+      }
+
+      /* ============================================
+           NAVIGATION
+           ============================================ */
+      .navbar {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        z-index: 1000;
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        border-bottom: 1px solid var(--border-light);
+        transition: all 0.3s ease;
+      }
+
+      .dark .navbar {
+        background: rgba(15, 23, 42, 0.95);
+        border-bottom-color: var(--border-dark);
+      }
+
+      .navbar-content {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 1rem 0;
+        height: 70px;
+      }
+
+      .navbar-logo {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: var(--text-dark);
+      }
+
+      .dark .navbar-logo {
+        color: var(--text-light);
+      }
+
+      .navbar-logo svg {
+        width: 24px;
+        height: 24px;
+      }
+
+      .navbar-menu {
+        display: none;
+        gap: 2rem;
+        align-items: center;
+        list-style: none;
+      }
+
+      @media (min-width: 1024px) {
+        .navbar-menu {
+          display: flex;
+        }
+      }
+
+      .navbar-menu-item {
+        position: relative;
+        font-size: 0.95rem;
+        font-weight: 500;
+        color: var(--text-dark);
+        cursor: pointer;
+        transition: color 0.2s ease;
+      }
+
+      .dark .navbar-menu-item {
+        color: var(--text-light);
+      }
+
+      .navbar-menu-item:hover {
+        color: var(--primary);
+      }
+
+      .navbar-actions {
+        display: flex;
+        gap: 1rem;
+        align-items: center;
+      }
+
+      .btn {
+        padding: 0.625rem 1.25rem;
+        border-radius: 9999px;
+        border: none;
+        font-size: 0.95rem;
+        font-weight: 600;
+        transition: all 0.2s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .btn-primary {
+        background-color: var(--text-dark);
+        color: white;
+      }
+
+      .dark .btn-primary {
+        background-color: var(--text-light);
+        color: var(--bg-dark);
+      }
+
+      .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      }
+
+      .btn-secondary {
+        background-color: transparent;
+        color: var(--text-dark);
+        border: 2px dashed var(--accent-red);
+      }
+
+      .dark .btn-secondary {
+        color: var(--text-light);
+        border-color: var(--accent-red-light);
+      }
+
+      .btn-secondary:hover {
+        background-color: rgba(239, 68, 68, 0.1);
+      }
+
+      /* ============================================
+           THEME TOGGLE
+           ============================================ */
+      .theme-toggle {
+        width: 50px;
+        height: 28px;
+        background-color: var(--border-light);
+        border-radius: 9999px;
+        border: none;
+        cursor: pointer;
+        position: relative;
+        transition: background-color 0.3s ease;
+        display: flex;
+        align-items: center;
+        padding: 2px;
+      }
+
+      .dark .theme-toggle {
+        background-color: var(--primary);
+      }
+
+      .theme-toggle-circle {
+        width: 24px;
+        height: 24px;
+        background-color: white;
+        border-radius: 50%;
+        transition: transform 0.3s ease;
+      }
+
+      .dark .theme-toggle-circle {
+        transform: translateX(22px);
+      }
+
+      /* ============================================
+           ANIMATIONS
+           ============================================ */
+      @keyframes fadeInUp {
+        from {
+          opacity: 0;
+          transform: translateY(30px);
+        }
+
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+
+        to {
+          opacity: 1;
+        }
+      }
+
+      .animate-fade-in-up {
+        animation: fadeInUp 0.6s ease-out;
+      }
+
+      .animate-fade-in {
+        animation: fadeIn 0.6s ease-out;
+      }
+
+      /* ============================================
+           RESPONSIVE
+           ============================================ */
+      @media (max-width: 768px) {
+        .navbar-menu {
+          display: none;
+        }
+
+        .hero-actions {
+          flex-direction: column;
+        }
+
+        .footer-bottom {
+          flex-direction: column;
+          gap: 1rem;
+          text-align: center;
+        }
+      }
+
+      .text-center {
+        text-align: center;
+      }
+    </style>
+  </head>
+
+  <body>
+    <!-- Navigation -->
+    <nav class="navbar">
+      <div class="container navbar-content">
+        <div class="navbar-logo">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path
+              d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8z"
+            />
+          </svg>
+          Google Antigravity
+        </div>
+
+        <ul class="navbar-menu">
+          <li class="navbar-menu-item">Product</li>
+          <li class="navbar-menu-item">Use Cases</li>
+          <li class="navbar-menu-item">Pricing</li>
+          <li class="navbar-menu-item">Blog</li>
+          <li class="navbar-menu-item">Resources</li>
+        </ul>
+
+        <div class="navbar-actions">
+          <button
+            class="theme-toggle"
+            id="themeToggle"
+            aria-label="Toggle theme"
+          >
+            <div class="theme-toggle-circle"></div>
+          </button>
+          <button class="btn btn-primary">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            Download
+          </button>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+      <canvas id="particleCanvas" class="hero-canvas"></canvas>
+    </section>
+
+    <script>
+      // ============================================
+      // THEME MANAGEMENT
+      // ============================================
+      let isDark = false;
+      const themeToggle = document.getElementById("themeToggle");
+
+      function initTheme() {
+        const savedTheme = localStorage.getItem("theme");
+        const prefersDark = window.matchMedia(
+          "(prefers-color-scheme: dark)",
+        ).matches;
+        isDark = savedTheme ? savedTheme === "dark" : prefersDark;
+
+        applyTheme();
+      }
+
+      function applyTheme() {
+        if (isDark) {
+          document.body.classList.add("dark");
+        } else {
+          document.body.classList.remove("dark");
+        }
+
+        if (particleSystem) {
+          particleSystem.updateTheme(isDark);
+        }
+      }
+
+      themeToggle.addEventListener("click", () => {
+        isDark = !isDark;
+        localStorage.setItem("theme", isDark ? "dark" : "light");
+        applyTheme();
+      });
+
+      // ============================================
+      // THREE.JS PARTICLE SYSTEM WITH GLSL SHADERS
+      // ============================================
+      class ParticleSystem {
+        constructor(canvas) {
+          this.canvas = canvas;
+          this.scene = null;
+          this.camera = null;
+          this.renderer = null;
+          this.particles = null;
+          this.material = null;
+          this.mousePos = { x: 0, y: 0 };
+          this.targetMousePos = { x: 0, y: 0 };
+          this.time = 0;
+          this.animationId = null;
+
+          this.init();
+        }
+
+        init() {
+          const THREE = window.THREE;
+          if (!THREE) {
+            console.error("Three.js not loaded");
+            return;
+          }
+
+          const width = window.innerWidth;
+          const height = window.innerHeight;
+
+          // Scene setup
+          this.scene = new THREE.Scene();
+          this.camera = new THREE.PerspectiveCamera(
+            75,
+            width / height,
+            0.1,
+            1000,
+          );
+          this.camera.position.z = 40; // Immersive Zoom: Closer to the scene
+
+          // WebGPU/WebGL renderer with optimizations for high particle count
+          const rendererParams = {
+            canvas: this.canvas,
+            antialias: true,
+            alpha: true,
+            powerPreference: "high-performance", // Use GPU for better performance
+            precision: "highp", // High precision for better quality
+          };
+
+          this.renderer = new THREE.WebGLRenderer(rendererParams);
+          this.renderer.setSize(width, height);
+          this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Cap at 2x for performance
+          this.renderer.setClearColor(0x000000, 0);
+
+          // Log renderer info
+          console.log(
+            "Renderer:",
+            this.renderer.capabilities.isWebGL2 ? "WebGL 2.0" : "WebGL 1.0",
+          );
+          console.log(
+            "Max Texture Size:",
+            this.renderer.capabilities.maxTextureSize,
+          );
+          console.log("Particle Count: 60,000+");
+
+          // Particle geometry - DENSE NET/MESH like sunflower field
+          const particleCount = 2000; // Many more particles for dense coverage
+          const geometry = new THREE.BufferGeometry();
+          const positions = new Float32Array(particleCount * 3);
+          const velocities = new Float32Array(particleCount * 3);
+          const diagonalOffsets = new Float32Array(particleCount);
+
+          // DENSE GRID - VERY small holes between particles
+          const gridSize = 50; // Increased from 300 to 400 for more particles
+          ///////////////////////////////////////////////////////////////////////////////
+          ///////////////////////////////////////////////////////////////////////////////
+          ///////////////////////////////////////////////////////////////////////////////
+          ///////////////////////////////////////////////////////////////////////////////
+          const cellSize = 3; // Tighter spacing (was 5)
+          const diagonalAngle = Math.PI / 4; // 45 degrees
+
+          for (let i = 0; i < particleCount; i++) {
+            // Create TRUE FISH NET grid (Simulated Hexagonal/Diamond packing)
+            const row = Math.floor(i / gridSize);
+            const col = i % gridSize;
+
+            // Stagger every other row for Fish Net pattern
+            let baseX = (col - gridSize / 2) * cellSize;
+            if (row % 2 !== 0) {
+              baseX += cellSize * 0.5; // Shift right by half cell
+            }
+
+            // Tighter vertical spacing for diamond shape (approx sin(60degs))
+            const baseY = (row - gridSize / 2) * (cellSize * 1.0); // 1.0 for loose net, 0.866 for tight hex
+
+            // Direct positioning (No rotation needed for net effect)
+            positions[i * 3] = baseX;
+            positions[i * 3 + 1] = baseY;
+            positions[i * 3 + 2] = (Math.random() - 0.5) * 5; // Very flat Z
+
+            velocities[i * 3] = 0;
+            velocities[i * 3 + 1] = 0;
+            velocities[i * 3 + 2] = 0;
+          }
+
+          geometry.setAttribute(
+            "position",
+            new THREE.BufferAttribute(positions, 3),
+          );
+          geometry.setAttribute(
+            "velocity",
+            new THREE.BufferAttribute(velocities, 3),
+          );
+          geometry.setAttribute(
+            "diagonalOffset",
+            new THREE.BufferAttribute(diagonalOffsets, 1),
+          );
+
+          // GLSL Shaders
+          const vertexShader = `
+                    attribute vec3 velocity;
+                    attribute float diagonalOffset;
+                    uniform vec3 mousePos;
+                    uniform float time;
+                    uniform float isDark;
+                    uniform float influenceRadius;
+
+                    varying float vOpacity;
+                    varying vec3 vColor;
+                    varying float vWaveDisplacement;
+                    varying float vRotationAngle;
+                    varying float vDistToMouse;
+                    varying float vTiltAngle; // New: vertical tilt angle for magnet effect
+
+                    void main() {
+                        vec3 pos = position;
+                        
+                        // GRID ALIGNMENT: Standard Grid (Consistent alignment)
+                        // Removed diagonal offset as it was causing visual alignment issues
+                        // pos.x += ... (disabled)
+                        // pos.y += ... (disabled)
+                        
+                        // Ripple Wave Interaction: Calculate distance in XY plane
+                        float distToMouse = length(pos.xy - mousePos.xy);
+                        vDistToMouse = distToMouse;
+                        
+                        // MAGNET EFFECT: 40px radius (Focused)
+                        float magnetRadius = 40.0; 
+                        
+// MAGNET FIELD SIMULATION
+float amplitude = 5.0;
+float minRadius = 3.0;
+float maxRadius = 40.0;
+
+// Calculate 3D direction from particle to cursor (magnet)
+vec3 toMagnet = mousePos - pos;
+float dist3D = length(toMagnet);
+vec3 magnetDirection = normalize(toMagnet);
+
+// Apply magnetic attraction only within range
+float wave = 0.0;
+if (distToMouse < magnetRadius) {
+    if (distToMouse > minRadius && distToMouse < maxRadius) {
+        float normalizedDist = (distToMouse - minRadius) / (maxRadius - minRadius);
+        float decay = sin(normalizedDist * 3.14159);
+        
+        // Z-Axis Displacement (Wave effect)
+        wave = amplitude * decay;
+        
+        // XY-Plane Attraction (pull toward magnet)
+        vec2 direction = normalize(mousePos.xy - pos.xy);
+        float attractionForce = amplitude * decay * 0.3;
+        pos.xy += direction * attractionForce;
+    }
+    
+    // ROTATION: Horizontal rotation (XY plane) - cylinder HEAD points at cursor
+    vRotationAngle = atan(mousePos.y - pos.y, mousePos.x - pos.x) + 1.5708;
+    
+    // TILT: Vertical tilt - cylinder HEAD tilts UP toward cursor
+    // Calculate angle in 3D space
+    float horizontalDist = length(mousePos.xy - pos.xy);
+    
+    // Tilt angle: how much to tilt UP to point head at cursor
+    // When cursor is above: tilt up (positive angle)
+    // When cursor is at same level: no tilt (0°)
+    vTiltAngle = atan(mousePos.z - pos.z, horizontalDist);
+    
+} else {
+    // Outside magnet range: faint visibility, native grid alignment
+    vRotationAngle = 0.0;
+    vTiltAngle = 0.0;
+}
+
+pos.z += wave;
+vWaveDisplacement = wave;
+                        
+                        // MOVEMENT: Octopus Breathing (Only Active Particles)
+                        if (distToMouse < 40.0) {
+                            float t = distToMouse / 40.0;
+                            // Radial breathing wave (In/Out motion)
+                            float breath = sin(time * 3.0 - distToMouse * 0.2); 
+                            
+                            // Direction from particle to mouse center
+                            vec2 toMouse = mousePos.xy - pos.xy;
+                            vec2 dir = normalize(toMouse);
+                            
+                            // Move particles slightly in/out to simulate skin stretching
+                            // Stronger near center
+                            float stretch = breath * (1.0 - t) * 1.5;
+                            
+                            pos.xy -= dir * stretch; 
+                        }
+                        
+                        // OPACITY: Base visibility + Tighter Zones (40px)
+                        // Base opacity for ALL particles (faint background)
+                        float opacity = 0.15; 
+                        
+                        if (distToMouse < 10.0) {
+                            // Zone 1 (0-3px): Center
+                            opacity = 0.001; 
+                            
+                        } else if (distToMouse < 15.0) {
+                            // Zone 2 (3-15px): Grow
+                            float zoneFactor = (distToMouse - 3.0) / 12.0;
+                            opacity = 0.20 + zoneFactor * 0.75; 
+                            
+                        } else if (distToMouse < 30.0) {
+                            // Zone 3 (15-40px): Fade to base
+                            float zoneFactor = (distToMouse - 15.0) / 25.0;
+                            opacity = 0.95 - zoneFactor * 0.80; 
+                        }
+                        
+                        vOpacity = clamp(opacity, 0.15, 0.95);
+                        
+                        // Use consistent primary color (indigo #4f46e5)
+                        // VISIBLE COLORS
+                        if (isDark > 0.5) {
+                            vColor = vec3(0.2, 0.4, 1.0);  // Bright Electric Blue for Dark Mode
+                        } else {
+                           vColor = vec3(0.2, 0.4, 1.0); // Deep Vibrant Blue for Light Mode
+                        }
+                        
+                        gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
+                        
+                        // SIZE: Micro void (100px radius)
+                        // Zone 1 (0-3px): Micro dots
+                        // Zone 2 (3-60px): Grow (3-12px)
+                        // Zone 3 (60-100px): Peak and shrink (12-5px)
+                        
+                        // Base size for inactive particles
+                        // Base size for inactive particles (50% bigger)
+                        float particleSize = 6.0;
+                        
+                        if (distToMouse >= 40.0) {
+                             particleSize = 6.0; 
+                        }
+                        
+                        // SIZE: Smooth Consistent Zoom (50% bigger)
+                        // Base size: 6.0
+                        // Max size: 21.0
+                        
+                        float baseSize = 6.0;
+                        float maxSize = 21.0;
+                        float effectRadius = 40.0;
+                        
+                        if (distToMouse < effectRadius) {
+                            // Smooth interpolation (Hermite)
+                            float t = distToMouse / effectRadius;
+                            t = t * t * (3.0 - 2.0 * t); // smoothstep
+                            float zoomFactor = 1.0 - t;
+                            
+                            // CONSISTENT RADIAL PULSE (Wave effect)
+                            // Pulse based on distance to mouse for strict consistency
+                            // Creates a ripple moving outward from cursor
+                            float wavePhase = distToMouse * 0.5; // Frequency of rings
+                            float pulse = sin(time * 4.0 - wavePhase); // Moving wave
+                            float heightFactor = 1.0 + pulse * 0.3; // +/- 30% size change
+                            
+                            particleSize = (baseSize + (maxSize - baseSize) * zoomFactor) * heightFactor;
+                        } else {
+                            particleSize = baseSize;
+                        }
+                        
+                        gl_PointSize = particleSize;
+                    }
+                `;
+
+          const fragmentShader = `
+                    varying float vOpacity;
+                    varying vec3 vColor;
+                    varying float vWaveDisplacement;
+                    varying float vRotationAngle;
+                    varying float vDistToMouse;
+                    varying float vTiltAngle;
+
+                    void main() {
+                        // Start with point coordinates centered at origin
+                        vec2 uv = gl_PointCoord - vec2(0.5);
+                        
+                        // STEP 1: Horizontal rotation (spin toward cursor in XY plane)
+                        float c = cos(vRotationAngle);
+                        float s = sin(vRotationAngle);
+                        vec2 rotatedUV = vec2(uv.x * c - uv.y * s, uv.x * s + uv.y * c);
+                        
+                        // STEP 2: Vertical tilt - HEAD points at cursor
+                        // The cylinder's LENGTH (Y axis) points toward cursor
+                        // When tilted, we see it from the side, so WIDTH (X) compresses
+                        
+                        float tiltCos = cos(vTiltAngle);
+                        float tiltSin = sin(vTiltAngle);
+                        
+                        // Apply foreshortening to WIDTH (X) when tilted
+                        // When tilt = 0 (horizontal): full width visible
+                        // When tilt = 90° (pointing at you): only see circular end
+                        float foreShortening = abs(tiltCos); // 1.0 horizontal, 0.0 vertical
+                        
+                        // Compressed X coordinate (width appears narrower when tilted toward you)
+                        float compressedX = rotatedUV.x * foreShortening;
+                        
+                        // CYLINDER SHAPE: CHUNKY CAPSULE (Shorter -20%, Wider +20%, Rounded)
+                        float halfWidth = 0.096; // Wider (+20%)
+                        float halfLength = 0.28; // Shorter (-20%)
+                        
+                        // ROUNDED RECTANGLE / CAPSULE LOGIC
+                        float dX = abs(compressedX) / halfWidth;
+                        float dY = abs(rotatedUV.y) / halfLength;
+                        
+                        // Ellipsoid test (Rounded)
+                        if (dX*dX + dY*dY > 1.0) {
+                            discard;
+                        }
+
+                        // Calculate alpha with soft edges based on compressed coordinates
+                        // Soft edge falloff based on elliptical distance
+                        float distFromCenter = sqrt(dX*dX + dY*dY);
+                        float edgeFalloff = 1.0 - distFromCenter;
+                        edgeFalloff = smoothstep(0.0, 0.2, edgeFalloff);
+                        
+                        float alpha = edgeFalloff * vOpacity;
+                        alpha = clamp(alpha, 0.0, 1.0);
+                        
+                        // Color with BRIGHT glow effect for visibility
+                        float displacement = abs(vWaveDisplacement);
+                        float maxDisplacement = 15.0;
+                        float colorMixFactor = clamp(displacement / maxDisplacement, 0.0, 1.0);
+                        
+                        // BRIGHTER colors for better visibility
+                        vec3 primaryColor = vec3(0.2, 0.4, 1.0); // Brighter primary
+                        vec3 secondaryColor = vec3(0.2, 0.4, 1.0); // Even brighter for glow
+                        
+                        vec3 finalColor = mix(primaryColor, secondaryColor, colorMixFactor);
+                        
+                        // Add extra brightness boost
+                        finalColor *= 1.3;
+                        
+                        gl_FragColor = vec4(finalColor, alpha);
+                    }
+                `;
+
+          // Material with shaders
+          this.material = new THREE.ShaderMaterial({
+            vertexShader,
+            fragmentShader,
+            uniforms: {
+              mousePos: { value: new THREE.Vector3(0, 0, 0) },
+              time: { value: 0 },
+              isDark: { value: isDark ? 1.0 : 0.0 },
+              influenceRadius: { value: 150.0 },
+            },
+            transparent: true,
+            blending: THREE.AdditiveBlending,
+          });
+
+          this.particles = new THREE.Points(geometry, this.material);
+          this.scene.add(this.particles);
+
+          // Event listeners
+          window.addEventListener("mousemove", (e) => this.onMouseMove(e));
+          window.addEventListener("resize", () => this.onWindowResize());
+
+          // Start animation loop
+          this.animate();
+        }
+
+        onMouseMove(e) {
+          this.targetMousePos.x = e.clientX;
+          this.targetMousePos.y = e.clientY;
+        }
+
+        onWindowResize() {
+          const width = window.innerWidth;
+          const height = window.innerHeight;
+
+          this.camera.aspect = width / height;
+          this.camera.updateProjectionMatrix();
+          this.renderer.setSize(width, height);
+        }
+
+        updateTheme(isDark) {
+          if (this.material) {
+            this.material.uniforms.isDark.value = isDark ? 1.0 : 0.0;
+          }
+        }
+
+        animate() {
+          this.animationId = requestAnimationFrame(() => this.animate());
+
+          this.time += 0.016;
+          this.material.uniforms.time.value = this.time;
+
+          // Smooth mouse position
+          this.mousePos.x += (this.targetMousePos.x - this.mousePos.x) * 0.1;
+          this.mousePos.y += (this.targetMousePos.y - this.mousePos.y) * 0.1;
+
+          // Use raycasting for exact world position
+          const mouse = new THREE.Vector2();
+          mouse.x = (this.mousePos.x / window.innerWidth) * 2 - 1;
+          mouse.y = -(this.mousePos.y / window.innerHeight) * 2 + 1;
+
+          const raycaster = new THREE.Raycaster();
+          raycaster.setFromCamera(mouse, this.camera);
+
+          // Intersect with z=0 plane where particles are
+          const planeZ = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+          const intersectPoint = new THREE.Vector3();
+          raycaster.ray.intersectPlane(planeZ, intersectPoint);
+
+          this.material.uniforms.mousePos.value.set(
+            intersectPoint.x,
+            intersectPoint.y,
+            0,
+          );
+
+          this.renderer.render(this.scene, this.camera);
+        }
+        dispose() {
+          if (this.animationId) {
+            cancelAnimationFrame(this.animationId);
+          }
+          if (this.renderer) {
+            this.renderer.dispose();
+          }
+          if (this.particles && this.particles.geometry) {
+            this.particles.geometry.dispose();
+          }
+          if (this.material) {
+            this.material.dispose();
+          }
+        }
+      }
+      // Initialize particle system
+      let particleSystem = null;
+      window.addEventListener("load", () => {
+        const canvas = document.getElementById("particleCanvas");
+        particleSystem = new ParticleSystem(canvas);
+        initTheme();
+      });
+
+      // Cleanup on page unload
+      window.addEventListener("beforeunload", () => {
+        if (particleSystem) {
+          particleSystem.dispose();
+        }
+      });
+    </script>
+  </body>
+</html>
