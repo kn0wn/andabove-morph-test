@@ -29,6 +29,10 @@ import Layout from '../layouts/Layout.astro';
   </main>
 
   <script>
+    import {
+      attachMorphingDevTools,
+      shouldShowParticleGui,
+    } from "../lib/dev/particleDevTools";
     import { MorphingParticleScene } from "../lib/morphing-particles";
 
     /**
@@ -61,6 +65,7 @@ import Layout from '../layouts/Layout.astro';
 
     let morphScene: InstanceType<typeof MorphingParticleScene> | null = null;
     let rafId = 0;
+    let morphGui: { dispose(): void } | null = null;
 
     function tick() {
       morphScene?.render();
@@ -87,7 +92,8 @@ import Layout from '../layouts/Layout.astro';
         cameraZoom: 8.8,
         // Raycast off — hover effect is driven only by `.hero-content` enter/leave (hoverProgress).
         interactive: false,
-        onLoaded: () => {
+        onLoaded: (scene) => {
+          if (shouldShowParticleGui()) morphGui = attachMorphingDevTools(scene);
           rafId = requestAnimationFrame(tick);
         },
       });
@@ -113,6 +119,8 @@ import Layout from '../layouts/Layout.astro';
         "beforeunload",
         () => {
           cancelAnimationFrame(rafId);
+          morphGui?.dispose();
+          morphGui = null;
           content?.removeEventListener("mouseenter", onEnter);
           content?.removeEventListener("mouseleave", onLeave);
           io.disconnect();

@@ -451,6 +451,9 @@ export class RingParticlesGPU {
     ren.uTime.value = this.scene.clock.getElapsedTime();
     ren.uRingPos.value = this.ringPos;
     ren.uParticleScale.value = this.particleScale;
+    (ren.uColor1.value as Color).set(this.scene.colorControls.color1);
+    (ren.uColor2.value as Color).set(this.scene.colorControls.color2);
+    (ren.uColor3.value as Color).set(this.scene.colorControls.color3);
   }
 
   postRender() {

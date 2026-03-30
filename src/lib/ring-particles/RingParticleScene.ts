@@ -209,6 +209,14 @@ export class RingParticleScene implements MorphingParticleSceneHost {
     this.clock.start();
   }
 
+  /** Rebuild after density changes (Poisson point count). */
+  recreateParticles() {
+    if (!this.loaded || !this.particles) return;
+    this.scene.remove(this.particles.mesh);
+    this.particles.kill();
+    this.particles = RingParticlesGPU.create(this);
+  }
+
   kill() {
     this.stop();
     if (this.loaded && this.particles) {

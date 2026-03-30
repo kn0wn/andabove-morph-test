@@ -74,7 +74,7 @@ export class MorphingParticleScene implements MorphingParticleSceneHost {
 
   colorControls: { color1: string; color2: string; color3: string };
 
-  particles!: MorphingParticlesGPU;
+  particles?: MorphingParticlesGPU;
 
   ringWidth = 0.05;
   ringWidth2 = 0.015;
@@ -204,12 +204,24 @@ export class MorphingParticleScene implements MorphingParticleSceneHost {
   }
 
   killParticles() {
+    if (!this.particles) return;
     this.scene.remove(this.particles.mesh);
     this.particles.kill();
+    this.particles = undefined;
+  }
+
+  /** Rebuild GPU buffers after Poisson density (or similar) changes. */
+  async recreateParticles() {
+    if (!this.loaded) return;
+    this.loaded = false;
+    this.killParticles();
+    this.particles = await MorphingParticlesGPU.create(this, this.textures);
+    this.loaded = true;
   }
 
   kill() {
     this.stop();
+    this.killParticles();
     window.removeEventListener("resize", this.onWindowResize);
     if (this.raycastPlane) {
       this.scene.remove(this.raycastPlane);

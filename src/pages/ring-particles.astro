@@ -29,10 +29,15 @@ import Layout from "../layouts/Layout.astro";
   </main>
 
   <script>
+    import {
+      attachRingDevTools,
+      shouldShowParticleGui,
+    } from "../lib/dev/particleDevTools";
     import { RingParticleScene } from "../lib/ring-particles";
 
     let ringScene: InstanceType<typeof RingParticleScene> | null = null;
     let rafId = 0;
+    let ringGui: { dispose(): void } | null = null;
 
     function tick() {
       ringScene?.render();
@@ -51,7 +56,8 @@ import Layout from "../layouts/Layout.astro";
         color3: "#FF8A65",
         pixelRatio: Math.min(window.devicePixelRatio, 2),
         interactive: true,
-        onLoaded: () => {
+        onLoaded: (scene) => {
+          if (shouldShowParticleGui()) ringGui = attachRingDevTools(scene);
           rafId = requestAnimationFrame(tick);
         },
       });
@@ -71,6 +77,8 @@ import Layout from "../layouts/Layout.astro";
         "beforeunload",
         () => {
           cancelAnimationFrame(rafId);
+          ringGui?.dispose();
+          ringGui = null;
           io.disconnect();
           ringScene?.kill();
           ringScene = null;

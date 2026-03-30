@@ -579,6 +579,9 @@ export class MorphingParticlesGPU {
     ren.uParticleScale.value = this.particleScale;
     ren.uIsHovering.value = this.scene.hoverProgress;
     ren.uPulseProgress.value = this.scene.pushProgress;
+    (ren.uColor1.value as Color).set(this.scene.colorControls.color1);
+    (ren.uColor2.value as Color).set(this.scene.colorControls.color2);
+    (ren.uColor3.value as Color).set(this.scene.colorControls.color3);
   }
 
   postRender() {
