@@ -1,11 +1,11 @@
-import type { Color, PerspectiveCamera, Scene, Vector3, WebGLRenderer } from "three";
+import type { Color, OrthographicCamera, Scene, Vector3, WebGLRenderer } from "three";
 
 /** Subset of the original Angular scene object passed into GPU particles (`nI`). */
 export type MorphingParticleSceneHost = {
   theme: "dark" | "light" | string;
   renderer: WebGLRenderer;
   scene: Scene;
-  camera: PerspectiveCamera;
+  camera: OrthographicCamera;
   clock: { getElapsedTime(): number };
   /** Mapped density → Poisson min/max distances */
   density: number;

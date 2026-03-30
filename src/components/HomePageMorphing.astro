@@ -39,8 +39,9 @@ import Layout from '../layouts/Layout.astro';
     import { MorphingParticleScene } from "../lib/morphing-particles";
 
     /**
-     * 500×500 luminance mask: white = where particles can snap on hover (nearestPos).
-     * Black outer + black center “content hole” → white rectangular ring only.
+     * 500×500 luminance mask: white = where particles cluster + snap on hover (nearestPos).
+     * Inverse of the old ring mask: white center block, dark surround (R≈0 so Poisson/nearest
+     * treat the rim as off). Brand orange on screen comes from particle colors, not this texture.
      */
     function morphingMaskDataUrl(): string {
       const canvas = document.createElement("canvas");
@@ -51,17 +52,15 @@ import Layout from '../layouts/Layout.astro';
 
       const W = 500;
       const H = 500;
-      const outerMargin = 36;
-      const holeInset = 132;
+      /** White region: ½ prior height, 1¼ prior width (was 264×224 → 330×112 on 500×500). */
+      const insetX = 85;
+      const insetY = 185;
 
       ctx.fillStyle = "#000000";
       ctx.fillRect(0, 0, W, H);
 
       ctx.fillStyle = "#ffffff";
-      ctx.fillRect(outerMargin, outerMargin, W - 2 * outerMargin, H - 2 * outerMargin);
-
-      ctx.fillStyle = "#000000";
-      ctx.fillRect(holeInset, holeInset, W - 2 * holeInset, H - 2 * holeInset);
+      ctx.fillRect(insetX, insetY, W - 2 * insetX, H - 2 * insetY);
 
       return canvas.toDataURL("image/png");
     }
@@ -95,6 +94,7 @@ import Layout from '../layouts/Layout.astro';
         cameraZoom: 8.8,
         // Raycast off — hover effect is driven only by `.hero-content` enter/leave (hoverProgress).
         interactive: false,
+        transparentBackground: true,
         onLoaded: (scene) => {
           if (shouldShowParticleGui()) morphGui = attachMorphingDevTools(scene);
           rafId = requestAnimationFrame(tick);
@@ -160,7 +160,7 @@ import Layout from '../layouts/Layout.astro';
       margin: 0;
       overflow-x: hidden;
       overflow-y: hidden;
-      background: var(--chalk);
+      background: #f0754a;
       color: var(--slate);
       font-family: "Aeonik Pro", "Google Sans Flex", Arial, sans-serif;
     }
@@ -174,7 +174,15 @@ import Layout from '../layouts/Layout.astro';
       min-height: 100dvh;
       overflow: hidden;
       isolation: isolate;
-      background: var(--chalk);
+      /* White center, orange surround — complements inverted mask (particles cluster in center). */
+      background: radial-gradient(
+        ellipse 92% 88% at 50% 46%,
+        #ffffff 0%,
+        #fff9f6 32%,
+        #ffe8dc 58%,
+        #ffc4a8 82%,
+        #f0754a 100%
+      );
     }
 
     /* Fixed to the viewport so the WebGL layer always fills ultra-wide / short viewports

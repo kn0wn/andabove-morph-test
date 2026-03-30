@@ -9,7 +9,6 @@ import {
   Mesh,
   NearestFilter,
   OrthographicCamera,
-  PerspectiveCamera,
   PlaneGeometry,
   Points,
   RGBAFormat,
@@ -39,7 +38,7 @@ function chunkArray<T>(arr: T[], parts: number): T[][] {
 export class MorphingParticlesGPU {
   scene: MorphingParticleSceneHost;
   renderer: WebGLRenderer;
-  camera: PerspectiveCamera;
+  camera: OrthographicCamera;
   textures: string[];
   lastTime = 0;
   everRendered = false;

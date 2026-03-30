@@ -5,7 +5,7 @@ import {
   DoubleSide,
   Mesh,
   MeshBasicMaterial,
-  PerspectiveCamera,
+  OrthographicCamera,
   PlaneGeometry,
   Raycaster,
   Scene,
@@ -34,6 +34,7 @@ export type RingParticleSceneOptions = {
   /** World-size raycast plane (original uses 12.5×12.5). */
   raycastPlaneSize?: number;
   interactive?: boolean;
+  orthographicHalfHeight?: number;
   onLoaded?: (scene: RingParticleScene) => void;
 };
 
@@ -61,7 +62,7 @@ export class RingParticleScene implements MorphingParticleSceneHost {
   canvas: HTMLCanvasElement;
   renderer: WebGLRenderer;
   gl: WebGLRenderingContext | WebGL2RenderingContext;
-  camera: PerspectiveCamera;
+  camera: OrthographicCamera;
   clock: Clock;
   time = 0;
   lastTime = 0;
@@ -87,6 +88,8 @@ export class RingParticleScene implements MorphingParticleSceneHost {
   ringDisplacement = 0.15;
 
   private raycastPlaneSize: number;
+
+  private orthoHalfHeight: number;
 
   private onWindowResize: () => void;
 
@@ -133,12 +136,14 @@ export class RingParticleScene implements MorphingParticleSceneHost {
     this.onWindowResize = this.onWindowResizeImpl.bind(this);
     window.addEventListener("resize", this.onWindowResize);
 
-    this.camera = new PerspectiveCamera(
-      40,
-      this.gl.drawingBufferWidth / this.gl.drawingBufferHeight,
-      0.1,
-      1000,
-    );
+    const fovDeg = 40;
+    const fovRad = (fovDeg * Math.PI) / 180;
+    this.orthoHalfHeight =
+      opts.orthographicHalfHeight ?? this.cameraZoom * Math.tan(fovRad / 2);
+
+    const aspect0 = this.canvas.width / Math.max(1, this.canvas.height);
+    const hh = this.orthoHalfHeight;
+    this.camera = new OrthographicCamera(-hh * aspect0, hh * aspect0, hh, -hh, 0.1, 1000);
     this.camera.position.z = this.cameraZoom;
 
     this.clock = new Clock();
@@ -184,7 +189,12 @@ export class RingParticleScene implements MorphingParticleSceneHost {
     this.canvas.width = this.options.container.offsetWidth;
     this.canvas.height = this.options.container.offsetHeight;
     this.renderer.setSize(this.canvas.width, this.canvas.height);
-    this.camera.aspect = this.canvas.width / this.canvas.height;
+    const aspect = this.canvas.width / Math.max(1, this.canvas.height);
+    const hh = this.orthoHalfHeight;
+    this.camera.left = -hh * aspect;
+    this.camera.right = hh * aspect;
+    this.camera.top = hh;
+    this.camera.bottom = -hh;
     this.camera.updateProjectionMatrix();
     this.particles?.resize();
   }

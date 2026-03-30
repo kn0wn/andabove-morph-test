@@ -5,7 +5,7 @@ import {
   DoubleSide,
   Mesh,
   MeshBasicMaterial,
-  PerspectiveCamera,
+  OrthographicCamera,
   PlaneGeometry,
   Raycaster,
   Scene,
@@ -29,6 +29,10 @@ export type MorphingParticleSceneOptions = {
   density?: number;
   cameraZoom?: number;
   interactive?: boolean;
+  /** When set, scene has no clear color so the DOM behind the canvas shows through (use with `alpha: true`). */
+  transparentBackground?: boolean;
+  /** Half-height of orthographic frustum in world units (defaults to match former perspective FOV 40 + `cameraZoom`). */
+  orthographicHalfHeight?: number;
   onLoaded?: (scene: MorphingParticleScene) => void;
 };
 
@@ -56,7 +60,7 @@ export class MorphingParticleScene implements MorphingParticleSceneHost {
   canvas: HTMLCanvasElement;
   renderer: WebGLRenderer;
   gl: WebGLRenderingContext | WebGL2RenderingContext;
-  camera: PerspectiveCamera;
+  camera: OrthographicCamera;
   clock: Clock;
   time = 0;
   lastTime = 0;
@@ -80,6 +84,9 @@ export class MorphingParticleScene implements MorphingParticleSceneHost {
   ringWidth2 = 0.015;
   ringDisplacement = 0;
 
+  /** Orthographic frustum half-extent in Y (world units); X is multiplied by viewport aspect. */
+  private orthoHalfHeight: number;
+
   private onWindowResize: () => void;
 
   constructor(opts: MorphingParticleSceneOptions) {
@@ -98,7 +105,7 @@ export class MorphingParticleScene implements MorphingParticleSceneHost {
     this.onLoadedCallback = opts.onLoaded;
 
     this.scene = new Scene();
-    this.scene.background = this.background;
+    this.scene.background = opts.transparentBackground ? null : this.background;
 
     this.canvas = document.createElement("canvas");
     opts.container.appendChild(this.canvas);
@@ -118,16 +125,21 @@ export class MorphingParticleScene implements MorphingParticleSceneHost {
     this.renderer.extensions.get("EXT_color_buffer_float");
     this.renderer.setSize(this.canvas.width, this.canvas.height);
     this.renderer.setPixelRatio(this.pixelRatio);
+    if (opts.transparentBackground) {
+      this.renderer.setClearColor(0x000000, 0);
+    }
 
     this.onWindowResize = this.onWindowResizeImpl.bind(this);
     window.addEventListener("resize", this.onWindowResize);
 
-    this.camera = new PerspectiveCamera(
-      40,
-      this.gl.drawingBufferWidth / this.gl.drawingBufferHeight,
-      0.1,
-      1000,
-    );
+    const fovDeg = 40;
+    const fovRad = (fovDeg * Math.PI) / 180;
+    this.orthoHalfHeight =
+      opts.orthographicHalfHeight ?? this.cameraZoom * Math.tan(fovRad / 2);
+
+    const aspect0 = this.canvas.width / Math.max(1, this.canvas.height);
+    const hh = this.orthoHalfHeight;
+    this.camera = new OrthographicCamera(-hh * aspect0, hh * aspect0, hh, -hh, 0.1, 1000);
     this.camera.position.z = this.cameraZoom;
 
     this.clock = new Clock();
@@ -173,7 +185,12 @@ export class MorphingParticleScene implements MorphingParticleSceneHost {
     this.canvas.width = this.options.container.offsetWidth;
     this.canvas.height = this.options.container.offsetHeight;
     this.renderer.setSize(this.canvas.width, this.canvas.height);
-    this.camera.aspect = this.canvas.width / this.canvas.height;
+    const aspect = this.canvas.width / Math.max(1, this.canvas.height);
+    const hh = this.orthoHalfHeight;
+    this.camera.left = -hh * aspect;
+    this.camera.right = hh * aspect;
+    this.camera.top = hh;
+    this.camera.bottom = -hh;
     this.camera.updateProjectionMatrix();
     this.particles?.resize();
   }

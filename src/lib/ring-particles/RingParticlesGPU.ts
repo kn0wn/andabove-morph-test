@@ -8,7 +8,6 @@ import {
   Mesh,
   NearestFilter,
   OrthographicCamera,
-  PerspectiveCamera,
   PlaneGeometry,
   Points,
   RGBAFormat,
@@ -31,7 +30,7 @@ import type { MorphingParticleSceneHost } from "../morphing-particles/types";
 export class RingParticlesGPU {
   scene: MorphingParticleSceneHost;
   renderer: WebGLRenderer;
-  camera: PerspectiveCamera;
+  camera: OrthographicCamera;
   lastTime = 0;
   everRendered = false;
   ringPos = new Vector2(0, 0);
