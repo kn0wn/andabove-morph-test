@@ -24,6 +24,18 @@ import { linearMap } from "./linearMap";
 import { SIMPLEX_NOISE_GLSL } from "./simplexNoise.glsl";
 import type { MorphingParticleSceneHost } from "./types";
 
+/** Split `arr` into up to `parts` contiguous slices (for parallel nearest-neighbor workers). */
+function chunkArray<T>(arr: T[], parts: number): T[][] {
+  if (arr.length === 0) return [[]];
+  if (parts <= 1) return [arr];
+  const size = Math.max(1, Math.ceil(arr.length / parts));
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) {
+    out.push(arr.slice(i, i + size));
+  }
+  return out;
+}
+
 export class MorphingParticlesGPU {
   scene: MorphingParticleSceneHost;
   renderer: WebGLRenderer;
@@ -111,29 +123,80 @@ export class MorphingParticlesGPU {
       images.push(await this.getImageData(this.textures[r]));
     }
     this.nearestPointsData = [];
-    const jobs = images.map((im, r) => this.createPointsDistanceDataWorker(im, this.pointsBaseData, r));
-    const results = await Promise.all(jobs);
-    results.sort((a, b) => a.index - b.index);
-    results.forEach((r) => this.nearestPointsData.push(r.nearestPoints));
+
+    /** Parallel nearest pass count (Poisson runs once per mask, then N workers × same inner loop). */
+    const parallelNearest = Math.min(
+      8,
+      Math.max(1, typeof navigator !== "undefined" && navigator.hardwareConcurrency
+        ? navigator.hardwareConcurrency - 1
+        : 3),
+    );
+
+    for (let r = 0; r < images.length; r++) {
+      const imageData = images[r];
+      const points = await this.runPoissonPhaseWorker(imageData);
+      const slices = chunkArray(this.pointsBaseData, parallelNearest);
+      const partials = await Promise.all(
+        slices.map((slice) => this.runNearestChunkWorker(points, imageData, slice, r)),
+      );
+      this.nearestPointsData.push(partials.flat());
+    }
   }
 
-  private createPointsDistanceDataWorker(
-    imageData: ImageData,
-    pointsBase: [number, number][],
-    index: number,
-  ): Promise<{ nearestPoints: number[]; index: number }> {
+  /** Phase 1: variable-density Poisson (slow; once per texture). */
+  private runPoissonPhaseWorker(imageData: ImageData): Promise<[number, number][]> {
     return new Promise((resolve, reject) => {
       const worker = new NearestPointsWorker();
-      worker.onmessage = (ev: MessageEvent<{ nearestPoints: number[]; index: number }>) => {
-        const { nearestPoints, index: idx } = ev.data;
+      worker.onmessage = (ev: MessageEvent<{ phase: string; points?: [number, number][] }>) => {
+        const { phase, points } = ev.data;
         worker.terminate();
-        resolve({ nearestPoints, index: idx });
+        if (phase !== "poisson" || !points) {
+          reject(new Error("nearestPoints worker: expected poisson phase"));
+          return;
+        }
+        resolve(points);
       };
       worker.onerror = (err) => {
         worker.terminate();
         reject(err);
       };
-      worker.postMessage({ imageData, pointsBase, index, density: this.scene.density });
+      worker.postMessage({
+        phase: "poisson",
+        imageData,
+        density: this.scene.density,
+      });
+    });
+  }
+
+  /** Phase 2: original O(n×m) inner loop for one slice of base points (run many in parallel). */
+  private runNearestChunkWorker(
+    points: [number, number][],
+    imageData: ImageData,
+    pointsBase: [number, number][],
+    textureIndex: number,
+  ): Promise<number[]> {
+    return new Promise((resolve, reject) => {
+      const worker = new NearestPointsWorker();
+      worker.onmessage = (ev: MessageEvent<{ phase: string; nearestPoints?: number[] }>) => {
+        const { phase, nearestPoints } = ev.data;
+        worker.terminate();
+        if (phase !== "nearest" || !nearestPoints) {
+          reject(new Error("nearestPoints worker: expected nearest phase"));
+          return;
+        }
+        resolve(nearestPoints);
+      };
+      worker.onerror = (err) => {
+        worker.terminate();
+        reject(err);
+      };
+      worker.postMessage({
+        phase: "nearest",
+        points,
+        imageData,
+        pointsBase,
+        textureIndex,
+      });
     });
   }
 
